@@ -1,0 +1,9 @@
+---
+  - name   : geoip
+    become : yes
+    hosts  : all
+
+    roles : 
+    - geoip_module
+
+  
