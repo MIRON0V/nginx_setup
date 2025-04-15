@@ -1,0 +1,66 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for geoip_module
+- name : Setup geoip module
+  apt  : name=libnginx-mod-http-geoip
+
+- name: WGET GeoIP.dat.gz
+  get_url:
+    url: https://mailfud.org/geoip-legacy/GeoIP.dat.gz
+    dest: "/usr/share/GeoIP"
+    mode: 0755
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Unarchive GeoIP.dat.gz # unarchive module does not handle .gz files that do not contain a .tar archive -  .tar.gz
+  shell: |
+    rm /usr/share/GeoIP/GeoIP.dat
+    gzip -dk /usr/share/GeoIP/GeoIP.dat.gz
+    rm /usr/share/GeoIP/GeoIP.dat.gz
+  # args:
+  #  creates: /tmp/GeoIP.dat # IF A filename already exists, this step will not be run.
+
+- name :  Add line "include .../modules/*"
+  lineinfile :
+    path : /etc/nginx/nginx.conf
+    insertbefore: 'events'
+    line : include /etc/nginx/modules-enabled/*;
+
+- name :  Add line "include .../block.map.include"
+  lineinfile :
+    path : /etc/nginx/nginx.conf
+    insertafter: 'http {'
+    line : '    include /etc/nginx/include/block.map.include;'
+
+- name: Insert block 404 #if ($allowed_country = no) { return 404; }
+  blockinfile:
+    path: /etc/nginx/nginx.conf
+    marker: "\t# {mark} geoip module #"
+    insertafter: "server {"
+    #marker: "\t# geoip module #"
+    #marker: ""
+    block: |
+        {% filter indent(width=6, first=true) %}
+          if ($allowed_country = no) {   
+          return 404;   
+          }
+        {% endfilter %}
+
+- name: Create folder1
+  file:
+    path: /etc/nginx/include
+    state: directory 
+    mode: 0755
+
+- name : copy block.map
+  copy : src=block.map.include
+         dest=/etc/nginx/include/block.map.include
+         mode='0755'
+         owner="{{ ansible_user }}"
+         group="{{ ansible_user }}"
+
+- name : reload nginx 
+  service : 
+    name    : nginx
+    state   : reloaded 
+    enabled : yes 
